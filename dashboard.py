@@ -1,4 +1,4 @@
-"""Streamlit dashboard for the customer churn project.
+"""Streamlit dashboard for the Zim telco churn project.
 
 Run with:
     streamlit run dashboard.py
@@ -19,8 +19,25 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from xgboost import XGBClassifier
 
+from src.generate_data import (
+    USD_TO_ZWL,
+    MNOS,
+    ISPS,
+    CONTRACTS,
+    PAYMENT_METHODS,
+    BUNDLES,
+    PROVINCES,
+    LOCATION_TYPES,
+    write_csv,
+)
+
 DATA_PATH = Path("data/churn_data.csv")
 RNG = 42
+
+
+def usd_zwl(usd: float, dp: int = 0) -> str:
+    """Format an amount as '$X (≈ZiG Y)'."""
+    return f"${usd:,.{dp}f}  (≈ZiG {usd * USD_TO_ZWL:,.{dp}f})"
 
 st.set_page_config(
     page_title="Churn Intelligence",
@@ -96,8 +113,8 @@ def insight(head: str, body: str) -> str:
 @st.cache_data(show_spinner="Loading customers...")
 def load_data() -> pd.DataFrame:
     if not DATA_PATH.exists():
-        st.error("No data at data/churn_data.csv — run the notebook once to generate it.")
-        st.stop()
+        # Auto-generate on first run so the demo is one-click.
+        write_csv(DATA_PATH)
     df = pd.read_csv(DATA_PATH)
     df["tenure_bucket"] = pd.cut(
         df["tenure"],
@@ -109,9 +126,15 @@ def load_data() -> pd.DataFrame:
 
 @st.cache_resource(show_spinner="Training XGBoost...")
 def train_and_score(df: pd.DataFrame):
+    # ZWL columns are deterministic from USD so we exclude them to avoid leakage.
+    drop_cols = ["Churn", "tenure_bucket", "MonthlyChargesZWL", "TotalChargesZWL"]
     y = df["Churn"]
-    X = df.drop(columns=["Churn", "tenure_bucket"])
-    numeric = ["tenure", "MonthlyCharges", "TotalCharges", "SeniorCitizen"]
+    X = df.drop(columns=[c for c in drop_cols if c in df.columns])
+    numeric = [
+        "tenure", "MonthlyCharges", "TotalCharges", "SeniorCitizen",
+        "LoadSheddingHoursPerDay", "SupportCalls90d", "DataUsageGB",
+    ]
+    numeric = [c for c in numeric if c in X.columns]
     categorical = [c for c in X.columns if c not in numeric]
 
     pre = ColumnTransformer([
@@ -168,7 +191,7 @@ c2.markdown(big_stat("At risk right now", f"{n_at_risk:,}",
                       f"{n_at_risk/n_total*100:.1f}% of the book"),
             unsafe_allow_html=True)
 c3.markdown(big_stat("Annual revenue at risk", f"${annualised:,.0f}",
-                      f"${revenue_at_risk:,.0f} per month"),
+                      f"ZiG {annualised * USD_TO_ZWL:,.0f}  ·  ${revenue_at_risk:,.0f}/mo"),
             unsafe_allow_html=True)
 c4.markdown(big_stat("Model ROC-AUC", f"{test_auc:.3f}",
                       "Higher is better (max 1.000)"),
@@ -177,18 +200,23 @@ c4.markdown(big_stat("Model ROC-AUC", f"{test_auc:.3f}",
 st.markdown(
     insight(
         "WHY THIS MATTERS",
-        f"Saving just the **top 100 highest-risk customers** would protect "
-        f"<b>${top100_revenue:,.0f}/month</b> in recurring revenue &mdash; that's "
-        f"<b>${top100_revenue*12:,.0f}/year</b>. A retention offer of $30 per customer pays "
-        f"for itself if it works on more than {(3000/top100_revenue)*100:.1f}% of them.",
+        f"Saving just the <b>top 100 highest-risk customers</b> would protect "
+        f"<b>${top100_revenue:,.0f}/month</b> "
+        f"(≈ZiG {top100_revenue * USD_TO_ZWL:,.0f}) in recurring revenue &mdash; that's "
+        f"<b>${top100_revenue*12:,.0f}/year</b>. "
+        f"In a Zim ISP context where new-customer acquisition costs roughly "
+        f"5&ndash;7&times; a retention offer, the maths is brutal: an EcoCash "
+        f"auto-pay $3 discount pays for itself if it saves "
+        f"<b>{(300/top100_revenue)*100:.1f}%</b> of these customers.",
     ),
     unsafe_allow_html=True,
 )
 
 # --------------------------------------------------------------------------- #
-tab_story, tab_zone, tab_watch, tab_predict = st.tabs([
+tab_story, tab_zone, tab_zim, tab_watch, tab_predict = st.tabs([
     ":books: The Churn Story",
     ":fire: Danger Zones",
+    ":zimbabwe: Zim Market Context",
     ":dart: At-Risk Watchlist",
     ":magic_wand: Score a Customer",
 ])
@@ -302,6 +330,158 @@ with tab_zone:
     st.plotly_chart(fig, use_container_width=True)
 
 # --------------------------------------------------------------------------- #
+with tab_zim:
+    st.subheader("Why this is a Zim problem, not an IBM tutorial")
+    st.caption(
+        "The same churn model trained on US Telco data misses what actually "
+        "drives customers out of a Zimbabwean ISP: power, payment rails, and "
+        "where in the country you live."
+    )
+
+    z1, z2 = st.columns(2)
+
+    # --- MNO churn rate -----------------------------------------------------
+    with z1:
+        st.markdown("#### Churn by mobile network operator")
+        mno_view = (
+            df.groupby("MNO").agg(
+                customers=("Churn", "size"),
+                churn_rate=("Churn", "mean"),
+                monthly_usd=("MonthlyCharges", "mean"),
+            ).reset_index().sort_values("churn_rate", ascending=True)
+        )
+        fig = px.bar(
+            mno_view, x="churn_rate", y="MNO", orientation="h",
+            text=mno_view["churn_rate"].map(lambda x: f"{x*100:.1f}%"),
+            color="MNO",
+            color_discrete_map={"Econet": "#E74C3C", "NetOne": "#F39C12", "Telecel": "#7F8C8D"},
+            hover_data={"customers": True, "monthly_usd": ":.2f"},
+        )
+        fig.update_layout(
+            xaxis_tickformat=".0%", showlegend=False, height=320,
+            margin=dict(l=10, r=10, t=10, b=10),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        worst_mno = mno_view.iloc[-1]
+        st.markdown(
+            insight(
+                "NETWORK QUALITY MATTERS",
+                f"<b>{worst_mno['MNO']}</b> customers churn at "
+                f"<b>{worst_mno['churn_rate']*100:.1f}%</b> &mdash; the highest in the book. "
+                "In market this lines up with the network-quality reputation gap: "
+                "Econet has the broadest 4G coverage, NetOne is catching up on rural "
+                "rollout, and Telecel keeps shrinking. Cross-sell EcoCash auto-pay or "
+                "move them to a longer contract before they port out.",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    # --- Province churn ----------------------------------------------------
+    with z2:
+        st.markdown("#### Churn by province")
+        prov_view = (
+            df.groupby("Province").agg(
+                customers=("Churn", "size"),
+                churn_rate=("Churn", "mean"),
+            ).reset_index().sort_values("churn_rate", ascending=True)
+        )
+        fig = px.bar(
+            prov_view, x="churn_rate", y="Province", orientation="h",
+            text=prov_view["churn_rate"].map(lambda x: f"{x*100:.0f}%"),
+            color="churn_rate", color_continuous_scale="Reds",
+            hover_data={"customers": True},
+        )
+        fig.update_layout(
+            xaxis_tickformat=".0%", coloraxis_showscale=False, height=320,
+            margin=dict(l=10, r=10, t=10, b=10),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        worst_prov = prov_view.iloc[-1]
+        st.markdown(
+            insight(
+                "GEOGRAPHY IS DESTINY",
+                f"<b>{worst_prov['Province']}</b> leads churn at "
+                f"<b>{worst_prov['churn_rate']*100:.0f}%</b>. Mostly an urban-vs-rural "
+                "story: in cities there are 3-4 alternative providers within walking "
+                "distance, in rural areas customers stay because there's nowhere to go.",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    # --- Load-shedding correlation -----------------------------------------
+    st.markdown("#### Load-shedding is eating retention")
+    df["load_shed_bucket"] = pd.cut(
+        df["LoadSheddingHoursPerDay"],
+        bins=[-0.1, 2, 5, 8, 12, 24],
+        labels=["0-2h", "2-5h", "5-8h", "8-12h", "12h+"],
+    )
+    ls_view = (
+        df.groupby("load_shed_bucket", observed=True).agg(
+            churn_rate=("Churn", "mean"),
+            customers=("Churn", "size"),
+        ).reset_index()
+    )
+    fig = px.bar(
+        ls_view, x="load_shed_bucket", y="churn_rate",
+        text=ls_view["churn_rate"].map(lambda x: f"{x*100:.0f}%"),
+        color="churn_rate", color_continuous_scale="Reds",
+        labels={"load_shed_bucket": "Average load-shedding (hours/day)", "churn_rate": "Churn rate"},
+        hover_data={"customers": True},
+    )
+    fig.update_layout(yaxis_tickformat=".0%", coloraxis_showscale=False, height=320)
+    st.plotly_chart(fig, use_container_width=True)
+
+    low = ls_view.iloc[0]["churn_rate"]
+    high = ls_view.iloc[-1]["churn_rate"]
+    st.markdown(
+        insight(
+            "POWER OUTAGES ARE A CHURN MULTIPLIER",
+            f"Customers in <b>12h+ daily load-shedding</b> churn at "
+            f"<b>{high*100:.0f}%</b> vs <b>{low*100:.0f}%</b> for the <b>0-2h</b> "
+            f"bucket &mdash; that's a <b>{(high/low):.1f}&times;</b> increase. "
+            "Routers offline = service unused = subscription cancelled. "
+            "Practical lever: bundle a small power-bank or solar router promotion "
+            "with one-year contracts in Stage-2+ load-shedding zones.",
+        ),
+        unsafe_allow_html=True,
+    )
+
+    # --- Payment rail churn -------------------------------------------------
+    st.markdown("#### Payment rail = commitment signal")
+    pay_view = (
+        df.groupby("PaymentMethod").agg(
+            customers=("Churn", "size"),
+            churn_rate=("Churn", "mean"),
+            avg_monthly_usd=("MonthlyCharges", "mean"),
+        ).reset_index().sort_values("churn_rate")
+    )
+    pay_view["avg_monthly_zwl"] = pay_view["avg_monthly_usd"] * USD_TO_ZWL
+    fig = px.bar(
+        pay_view, x="churn_rate", y="PaymentMethod", orientation="h",
+        text=pay_view["churn_rate"].map(lambda x: f"{x*100:.0f}%"),
+        color="churn_rate", color_continuous_scale="Reds",
+        hover_data={
+            "customers": True,
+            "avg_monthly_usd": ":.2f",
+            "avg_monthly_zwl": ":.0f",
+        },
+    )
+    fig.update_layout(xaxis_tickformat=".0%", coloraxis_showscale=False, height=320)
+    st.plotly_chart(fig, use_container_width=True)
+    st.markdown(
+        insight(
+            "MIGRATE CASH PAYERS TO ECOCASH",
+            "Cash deposit payers churn at the highest rate &mdash; they are the "
+            "least committed segment because there is no auto-pay friction "
+            "stopping them from leaving. Bank debit order and EcoCash sit at the "
+            "other end: once a customer sets up auto-pay, churn drops sharply. "
+            "Run an InnBucks / EcoCash auto-pay migration campaign with a small "
+            "ZiG-denominated discount as the carrot.",
+        ),
+        unsafe_allow_html=True,
+    )
+
+# --------------------------------------------------------------------------- #
 with tab_watch:
     st.subheader("Top 50 customers most likely to churn")
     st.caption("Sorted by model probability. These are the people the retention team should phone first.")
@@ -349,19 +529,21 @@ with tab_predict:
     col1, col2, col3 = st.columns(3)
     with col1:
         tenure = st.slider("Tenure (months)", 0, 72, 4)
-        monthly = st.slider("Monthly charges ($)", 18.0, 120.0, 95.0, step=0.5)
-        total = st.slider("Total charges ($)", 0.0, 10000.0, float(monthly * tenure), step=10.0)
+        monthly = st.slider("Monthly charges (USD)", 8.0, 130.0, 55.0, step=0.5)
+        total = st.slider("Total charges (USD)", 0.0, 10000.0, float(monthly * tenure), step=10.0)
+        data_gb = st.slider("Monthly data usage (GB)", 0.1, 250.0, 20.0, step=0.5)
+        st.caption(f"≈ ZiG {monthly * USD_TO_ZWL:,.0f} per month at the current rate.")
     with col2:
-        contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"])
-        internet = st.selectbox(
-            "Internet service",
-            ["ZOL Fibroniks", "Liquid Home", "TelOne ADSL", "Econet Mobile", "None"],
-        )
-        payment = st.selectbox(
-            "Payment method",
-            ["EcoCash", "OneMoney", "ZIPIT", "Bank debit order", "Cash deposit"],
-        )
+        mno = st.selectbox("Mobile network operator", MNOS)
+        internet = st.selectbox("Internet service", ISPS)
+        bundle = st.selectbox("Bundle preference", BUNDLES)
+        contract = st.selectbox("Contract", CONTRACTS)
+        payment = st.selectbox("Payment method", PAYMENT_METHODS)
     with col3:
+        province = st.selectbox("Province", PROVINCES)
+        location_type = st.selectbox("Area type", LOCATION_TYPES)
+        load_shed = st.slider("Load-shedding (hours/day)", 0.0, 18.0, 8.0, step=0.5)
+        support = st.slider("Support calls (last 90d)", 0, 20, 1)
         partner = st.radio("Has partner?", ["Yes", "No"], horizontal=True)
         dependents = st.radio("Has dependents?", ["Yes", "No"], horizontal=True)
         senior = st.radio(
@@ -374,13 +556,20 @@ with tab_predict:
         "SeniorCitizen": senior,
         "Partner": partner,
         "Dependents": dependents,
+        "Province": province,
+        "LocationType": location_type,
         "tenure": tenure,
+        "MNO": mno,
         "PhoneService": "Yes",
         "MultipleLines": "No",
         "InternetService": internet,
+        "BundlePreference": bundle,
+        "DataUsageGB": data_gb,
         "Contract": contract,
         "PaperlessBilling": "Yes",
         "PaymentMethod": payment,
+        "LoadSheddingHoursPerDay": load_shed,
+        "SupportCalls90d": support,
         "MonthlyCharges": monthly,
         "TotalCharges": total,
     }])
@@ -434,21 +623,30 @@ with tab_predict:
                 f"- Of those, **{sim_churn*100:.0f}%** churned in real life.\n"
                 f"- Model says this specific customer is at **{prob*100:.0f}%** risk."
             )
+        discount_usd = monthly * 1.5
+        discount_zwl = discount_usd * USD_TO_ZWL
         action_lines = {
             "HIGH": [
                 "Phone call **today** with a tailored save offer.",
-                f"Suggest upgrading to a longer contract — discount of up to **${monthly*1.5:.0f}** is still cheaper than re-acquisition.",
+                f"Offer up to **${discount_usd:.0f}** (≈ZiG {discount_zwl:,.0f}) off "
+                "a longer contract — still cheaper than re-acquisition.",
+                "Migrate to **EcoCash auto-pay** with a small ZiG bonus — "
+                "auto-pay customers churn far less.",
+                f"If load-shedding hours are high ({load_shed:.0f}h/day), "
+                "bundle a router-backup promo to remove the 'I can't use it anyway' excuse.",
                 "Flag for the retention team in the CRM.",
             ],
             "MEDIUM": [
                 "Add to the **monitoring list** — touch in 30 days.",
-                "Send a satisfaction survey to catch any unspoken issues.",
-                "If charges feel high relative to value, propose a downgrade rather than risk a cancel.",
+                "Send a short EcoCash-survey link to catch any unspoken issues.",
+                f"Suggest a **bundle migration** away from '{bundle}' "
+                "toward a monthly plan if usage justifies it.",
             ],
             "LOW": [
                 "No retention action needed.",
-                "Use the relationship to **cross-sell** complementary services.",
-                "Ask for a referral or a review.",
+                "Use the relationship to **cross-sell** EcoCash insurance, "
+                "Liquid TV, or a value-added bundle.",
+                "Ask for a referral or a Google review.",
             ],
         }[band]
         st.markdown("**Recommended action**")
