@@ -21,13 +21,18 @@
 
 ---
 
-## :dart: Why I built this
+<p align="center">
+  <img src="docs/preview.png" alt="Dashboard preview" width="900">
+</p>
+
+
+## Why I built this
 
 I wanted to do a churn project that actually reflected my market, not a copy-paste of the IBM US telco dataset. So I built one for a **Zimbabwean ISP**: customers pay with **EcoCash, OneMoney, ZIPIT, bank debit orders, or cash**, subscribe to **ZOL Fibroniks, Liquid Home, TelOne ADSL, or Econet Mobile**, and behave the way subscribers actually behave here.
 
 Once I learned that keeping a customer is roughly **5–7× cheaper** than getting a new one, the churn problem stopped feeling like a textbook exercise. For a Zim ISP fighting for market share between ZOL, Liquid and TelOne, that maths is even sharper.
 
-## :sparkles: At a glance
+## At a glance
 
 |  |  |
 |---|---|
@@ -39,7 +44,7 @@ Once I learned that keeping a customer is roughly **5–7× cheaper** than getti
 | **Providers** | ZOL Fibroniks · Liquid Home · TelOne ADSL · Econet Mobile |
 | **Stack** | scikit-learn · XGBoost · imbalanced-learn · SHAP · Streamlit · Plotly |
 
-## :wrench: How I approached it
+## How I approached it
 
 1. **EDA** — distributions, churn rate by segment, correlations.
 2. **Preprocessing** — categorical encoding, scaling, stratified train/test split so the class ratio stays intact.
@@ -48,7 +53,7 @@ Once I learned that keeping a customer is roughly **5–7× cheaper** than getti
 5. **Evaluation** — ROC-AUC, precision, recall, F1, confusion matrix.
 6. **Explainability** — SHAP to figure out which features the model was actually leaning on.
 
-## :bar_chart: Results
+## Results
 
 | Model | ROC-AUC | Precision | Recall | F1 |
 |---|---|---|---|---|
@@ -58,7 +63,7 @@ Once I learned that keeping a customer is roughly **5–7× cheaper** than getti
 
 XGBoost catches about three out of four churners — enough lead time for retention offers to land. In Zim terms, that's the difference between proactively bundling an EcoCash auto-pay discount for an at-risk customer and waiting for them to port to Liquid.
 
-## :computer: Run it yourself
+## Run it yourself
 
 ```bash
 pip install -r requirements.txt
@@ -66,7 +71,7 @@ jupyter notebook customer_churn_prediction.ipynb   # generates the synthetic dat
 streamlit run dashboard.py                          # interactive dashboard
 ```
 
-## :tv: Interactive dashboard
+## Interactive dashboard
 
 Three tabs:
 - **Overview** — class balance, tenure-vs-churn distribution, top-line KPIs.
@@ -75,7 +80,7 @@ Three tabs:
 
 > Click the **Open in Streamlit Cloud** badge at the top to deploy this dashboard publicly in 90 seconds.
 
-## :rocket: What I'd do next
+## What I'd do next
 
 - Tune the classification threshold based on the real cost of a false positive vs a false negative — 0.5 is rarely the right cutoff.
 - Try LightGBM and compare training time + ROC-AUC.
