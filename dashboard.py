@@ -34,90 +34,131 @@ from src.generate_data import (
 DATA_PATH = Path("data/churn_data.csv")
 RNG = 42
 
-# ---- Fintech palette -------------------------------------------------------
-BRAND = "#FF5A5F"      # hot coral, the one strong brand colour
-BRAND2 = "#FF8A5B"     # peach, for the hero gradient
-INK = "#16161D"        # near-black headings
-BODY = "#5B6172"       # muted body text
-GOOD = "#12B886"       # green (stayed / safe)
-WARN = "#FB8C00"       # amber (watch)
-BLUE = "#4C6FFF"
-GREY = "#9AA0AE"
-SOFT = "#F5F6FA"       # card / control background
-LINE = "#EEF0F4"       # gridlines
-FONT = "Manrope"
-CORAL_SCALE = ["#FFF1F0", "#FFC6C3", "#FF8A85", "#FF5A5F", "#D8323C"]
-SEQ = [BRAND, WARN, GOOD, BLUE, "#9B5DE5", GREY]
+# ---- Editorial palette -----------------------------------------------------
+BRAND = "#B3361E"      # editorial coral / brick — the one strong accent
+BRAND2 = "#C4583B"     # warmer brick, used for accents on darker areas
+INK = "#1A1A17"        # near-black headings
+BODY = "#5B564B"       # warm muted body text
+GOOD = "#16794C"       # forest green (stayed / safe)
+WARN = "#B4690E"       # amber (watch)
+BLUE = "#3A5A8A"
+GREY = "#9A9488"
+SOFT = "#F3F1EA"       # warm card background
+LINE = "#E7E3DA"       # warm gridlines / borders
+PAPER = "#FBFAF7"      # page background
+FONT = "Inter"
+SERIF = "Fraunces"
+CORAL_SCALE = ["#F8E8E2", "#EFC5B5", "#DF937B", "#C45434", "#8C3018"]
+SEQ = [BRAND, WARN, GOOD, BLUE, "#7A5B8A", GREY]
 
 st.set_page_config(
     page_title="Subscriber retention",
-    page_icon="📡",
+    page_icon="•",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # --------------------------------------------------------------------------- #
-# Global styling — gives the app a modern fintech feel rather than the default
-# Streamlit look.
+# Global styling — compact header, a responsive grid of rich KPI cards, and a
+# layout that stacks cleanly on a phone (no big colour banner).
 # --------------------------------------------------------------------------- #
-st.markdown(
-    f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+def inject_css(accent: str, accent_dark: str, feature_bg: str) -> None:
+    st.markdown(
+        f"""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap');
+        html, body, [class*="css"], .stMarkdown, p, span, div, label, input, button, textarea {{
+            font-family: '{FONT}', system-ui, sans-serif; }}
+        .stApp {{ background: {PAPER}; }}
+        #MainMenu, footer, header[data-testid="stHeader"] {{ display: none; }}
+        .block-container {{ padding-top: 2rem; padding-bottom: 3rem; max-width: 1180px; }}
 
-    html, body, [class*="css"], .stMarkdown, button, input, textarea {{
-        font-family: '{FONT}', system-ui, sans-serif;
-    }}
-    #MainMenu, header, footer {{ visibility: hidden; }}
-    .block-container {{ padding-top: 1.6rem; padding-bottom: 3rem; max-width: 1180px; }}
+        .head {{ margin: 0 0 18px 0; }}
+        .head .eyebrow {{ font-size:12px; font-weight:600; letter-spacing:.4px;
+            text-transform:uppercase; color:{accent}; }}
+        .head h1 {{ font-family:'{SERIF}', serif; font-size:34px; font-weight:600;
+            color:{INK}; margin:8px 0 6px 0; letter-spacing:-.5px; line-height:1.18; }}
+        .head p {{ font-size:15px; color:{BODY}; margin:0; max-width:720px; line-height:1.55; }}
 
-    /* Hero balance band */
-    .hero {{
-        background: linear-gradient(135deg, {BRAND} 0%, {BRAND2} 100%);
-        border-radius: 24px; padding: 26px 30px 22px 30px; color: #fff;
-        box-shadow: 0 18px 40px rgba(255,90,95,.28);
-    }}
-    .hero .brand {{ font-size: 14px; font-weight: 700; opacity: .92;
-        display:flex; align-items:center; gap:8px; letter-spacing:.2px; }}
-    .hero .dot {{ width:9px; height:9px; border-radius:50%; background:#fff; display:inline-block; }}
-    .hero .label {{ font-size: 14px; opacity:.9; margin-top:18px; font-weight:600; }}
-    .hero .value {{ font-size: 46px; font-weight: 800; line-height:1.05; margin-top:2px;
-        letter-spacing:-1px; }}
-    .hero .sub {{ font-size: 15px; opacity:.95; margin-top:6px; max-width:640px; }}
-    .chips {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }}
-    .chip {{ background: rgba(255,255,255,.18); backdrop-filter: blur(4px);
-        border-radius: 12px; padding: 9px 14px; font-size: 13px; }}
-    .chip b {{ font-size:17px; font-weight:800; display:block; }}
+        .kpigrid {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(215px,1fr));
+            gap:14px; margin:6px 0 4px 0; }}
+        .kpi {{ background:#fff; border:1px solid {LINE}; border-radius:16px; padding:18px 20px;
+            box-shadow:0 1px 2px rgba(26,26,23,.03); }}
+        .kpi.feature {{ background:{feature_bg}; border:1px solid {LINE}; }}
+        .kpi.feature .k {{ color:{accent_dark}; opacity:.9; }}
+        .kpi.feature .v {{ color:{accent_dark}; }}
+        .kpi .k {{ font-size:12.5px; font-weight:500; color:{BODY};
+            letter-spacing:.2px; text-transform:uppercase; }}
+        .kpi .v {{ font-family:'{SERIF}', serif; font-size:30px; font-weight:500; color:{INK};
+            letter-spacing:-.5px; line-height:1.12; margin-top:6px; }}
+        .kpi .v2 {{ font-family:'{SERIF}', serif; font-size:26px; font-weight:500; color:{INK};
+            letter-spacing:-.3px; line-height:1.15; margin-top:4px; }}
+        .kpi .s {{ font-size:12px; color:{GREY}; margin-top:4px; }}
+        .kpi-row {{ display:flex; align-items:center; justify-content:space-between; gap:10px; }}
+        .ring {{ position:relative; width:60px; height:60px; border-radius:50%; flex:0 0 auto; }}
+        .ring span {{ position:absolute; inset:7px; background:#fff; border-radius:50%;
+            display:grid; place-items:center; font-size:13px; font-weight:600; color:{INK}; }}
+        .segbar {{ display:flex; height:9px; border-radius:6px; overflow:hidden;
+            margin-top:13px; background:{SOFT}; }}
+        .segbar > div {{ height:100%; }}
+        .leg {{ display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:11.5px; color:{BODY}; }}
+        .leg i {{ width:9px; height:9px; border-radius:3px; display:inline-block; margin-right:4px; }}
 
-    /* Soft white stat cards */
-    .card {{ background:#fff; border-radius:18px; padding:18px 20px;
-        box-shadow: 0 1px 3px rgba(20,22,30,.06), 0 10px 28px rgba(20,22,30,.05);
-        border:1px solid #F0F1F5; }}
-    .card .k {{ font-size:13px; color:{BODY}; font-weight:600; }}
-    .card .v {{ font-size:30px; color:{INK}; font-weight:800; letter-spacing:-.5px; }}
-    .card .s {{ font-size:12.5px; color:{GREY}; }}
+        .callout {{ border-radius:14px; padding:14px 18px; margin:8px 0 20px 0;
+            font-size:14.5px; line-height:1.6; color:{INK}; border:1px solid {LINE}; }}
+        .sec {{ margin: 28px 0 6px 0; }}
+        .sec h3 {{ font-family:'{SERIF}', serif; font-size:23px; font-weight:500;
+            color:{INK}; margin:0; letter-spacing:-.2px; }}
+        .sec p {{ font-size:14.5px; color:{BODY}; margin:4px 0 0 0; line-height:1.5; }}
 
-    /* Friendly callout */
-    .callout {{ border-radius:16px; padding:15px 18px; margin:6px 0 20px 0;
-        font-size:15px; line-height:1.6; color:#3a3f4d; }}
+        .stTabs [data-baseweb="tab-list"] {{ gap:0; background:transparent; padding:0;
+            border-bottom:1px solid {LINE}; border-radius:0; flex-wrap:wrap; }}
+        .stTabs [data-baseweb="tab"] {{ height:auto; padding:10px 16px; border-radius:0;
+            font-weight:500; font-size:15px; color:{BODY}; background:transparent; }}
+        .stTabs [aria-selected="true"] {{ background:transparent; color:{accent};
+            box-shadow:none; }}
+        .stTabs [data-baseweb="tab-highlight"] {{ background:{accent}; height:2px; }}
+        .stTabs [data-baseweb="tab-border"] {{ display:none; }}
 
-    /* Section heading */
-    .sec {{ margin: 26px 0 4px 0; }}
-    .sec h3 {{ font-size:20px; font-weight:800; color:{INK}; margin:0; }}
-    .sec p {{ font-size:14px; color:{BODY}; margin:3px 0 0 0; }}
+        [data-testid="stMetric"] {{ background:#fff; border:1px solid {LINE}; border-radius:14px;
+            padding:14px 18px; box-shadow:0 1px 2px rgba(26,26,23,.03); }}
+        [data-testid="stMetricValue"] {{ font-family:'{SERIF}', serif; font-weight:500; color:{INK}; }}
+        [data-testid="stMetricLabel"] p {{ font-weight:500; color:{BODY}; }}
 
-    /* Pill-style tabs (segmented control) */
-    .stTabs [data-baseweb="tab-list"] {{ gap:6px; background:{SOFT};
-        padding:6px; border-radius:14px; }}
-    .stTabs [data-baseweb="tab"] {{ height:auto; padding:9px 20px; border-radius:10px;
-        font-weight:600; color:{BODY}; background:transparent; }}
-    .stTabs [aria-selected="true"] {{ background:#fff; color:{INK};
-        box-shadow:0 1px 3px rgba(0,0,0,.10); }}
-    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ display:none; }}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+        .stButton > button {{ font-size:14px; font-weight:500; border-radius:10px;
+            border:1px solid {LINE}; background:#fff; color:{INK}; padding:8px 18px; }}
+        .stButton > button:hover {{ border-color:{accent}; color:{accent}; }}
+
+        @media (max-width: 640px) {{
+            .block-container {{ padding-left:1rem; padding-right:1rem; padding-top:1.2rem; }}
+            .head h1 {{ font-size:25px; }}
+            .head p {{ font-size:14px; }}
+            .kpi .v {{ font-size:26px; }}
+            .kpi .v2 {{ font-size:22px; }}
+            .sec h3 {{ font-size:19px; }}
+            .stTabs [data-baseweb="tab"] {{ padding:8px 12px; font-size:14px; }}
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def ring(pct: float, color: str) -> str:
+    return (f'<div class="ring" style="background:conic-gradient({color} '
+            f'{pct*3.6:.0f}deg, #eef0f4 0);"><span>{pct:.0f}%</span></div>')
+
+
+def segbar(parts: list[tuple[str, float, str]]) -> str:
+    segs = "".join(f'<div style="width:{f*100:.1f}%;background:{c}"></div>'
+                   for _, f, c in parts)
+    leg = "".join(f'<span><i style="background:{c}"></i>{l}</span>' for l, _, c in parts)
+    return f'<div class="segbar">{segs}</div><div class="leg">{leg}</div>'
+
+
+BRAND_DARK = "#8C3018"
+FEATURE_BG = "#F8E8E2"
+inject_css(BRAND, BRAND_DARK, FEATURE_BG)
 
 
 def usd_zwl(usd: float, dp: int = 0) -> str:
@@ -125,12 +166,12 @@ def usd_zwl(usd: float, dp: int = 0) -> str:
 
 
 def callout(text: str, tone: str = "brand") -> None:
-    bg = {"brand": "#FFF3F2", "good": "#E9FBF3", "warn": "#FFF6E9",
+    bg = {"brand": "#F8E8E2", "good": "#E8EFE8", "warn": "#F3EBD8",
           "neutral": SOFT}[tone]
     bar = {"brand": BRAND, "good": GOOD, "warn": WARN, "neutral": GREY}[tone]
     st.markdown(
         f'<div class="callout" style="background:{bg};'
-        f'border-left:4px solid {bar};">{text}</div>',
+        f'border-left:3px solid {bar};">{text}</div>',
         unsafe_allow_html=True,
     )
 
@@ -230,20 +271,54 @@ top100_revenue = float(df.nlargest(100, "churn_prob")["MonthlyCharges"].sum())
 pct_risk = n_at_risk / n_total * 100
 
 # --------------------------------------------------------------------------- #
-# Hero band — the "balance" the business is about to lose
+# Compact header + a grid of rich KPI cards
 # --------------------------------------------------------------------------- #
+contract_mix = df["Contract"].value_counts(normalize=True)
+mix_parts = [
+    ("Month-to-month", float(contract_mix.get("Month-to-month", 0)), BRAND),
+    ("One year", float(contract_mix.get("One year", 0)), WARN),
+    ("Two year", float(contract_mix.get("Two year", 0)), GOOD),
+]
+
 st.markdown(
     f"""
-    <div class="hero">
-      <div class="brand"><span class="dot"></span> Subscriber retention &middot; Zimbabwe ISP</div>
-      <div class="label">Revenue at risk over the next year</div>
-      <div class="value">${annualised:,.0f}</div>
-      <div class="sub">≈ ZiG {annualised * USD_TO_ZWL:,.0f} — that's <b>{pct_risk:.0f}%</b>
-        of your base quietly leaning towards the door. Here's who, why, and who to call first.</div>
-      <div class="chips">
-        <span class="chip">subscribers <b>{n_total:,}</b></span>
-        <span class="chip">likely to leave <b>{n_at_risk:,}</b></span>
-        <span class="chip">model accuracy <b>{test_auc*100:.0f}%</b></span>
+    <div class="head">
+      <div class="eyebrow">Subscriber retention &middot; Zimbabwe ISP</div>
+      <h1>Who's likely to leave this cycle — and what it costs you</h1>
+      <p>A churn model trained on contract, payment, network and load-shedding
+         signals. Here's who's at risk, why they go, and who to call first.</p>
+    </div>
+    <div class="kpigrid">
+      <div class="kpi feature">
+        <div class="k">Revenue at risk over the next year</div>
+        <div class="v">${annualised:,.0f}</div>
+        <div class="s">≈ ZiG {annualised * USD_TO_ZWL:,.0f}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-row">
+          <div>
+            <div class="k">Likely to churn</div>
+            <div class="v2">{n_at_risk:,}</div>
+            <div class="s">of {n_total:,} subscribers</div>
+          </div>
+          {ring(pct_risk, BRAND)}
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-row">
+          <div>
+            <div class="k">Model accuracy</div>
+            <div class="v2">{test_auc*100:.0f}%</div>
+            <div class="s">AUC {test_auc:.3f}</div>
+          </div>
+          {ring(test_auc*100, GOOD)}
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="k">Contract mix</div>
+        <div class="v2">{n_total:,}</div>
+        <div class="s">how the base is split today</div>
+        {segbar(mix_parts)}
       </div>
     </div>
     """,
