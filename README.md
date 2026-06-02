@@ -3,6 +3,9 @@
 A churn model for a Zimbabwean ISP — which subscribers are about to leave, why, and what a retention dollar would actually save.
 
 <p>
+  <a href="https://zim-telco-churn.streamlit.app">
+    <img alt="Live demo" src="https://img.shields.io/badge/Open_dashboard-Live_demo-B3361E?style=flat-square&logo=streamlit&logoColor=white" />
+  </a>
   <img alt="Python"   src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" />
   <img alt="XGBoost"  src="https://img.shields.io/badge/XGBoost-006400?style=flat-square&logo=xgboost&logoColor=white" />
   <img alt="scikit-learn" src="https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white" />
